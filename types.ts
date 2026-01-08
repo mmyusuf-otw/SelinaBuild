@@ -1,4 +1,13 @@
 
+export interface Variant {
+  id: string;
+  sku: string;
+  name: string;
+  hpp: number;
+  price: number;
+  stock: number;
+}
+
 export interface Product {
   id: string;
   sku: string;
@@ -8,6 +17,7 @@ export interface Product {
   stock: number;
   category: string;
   image?: string;
+  variants?: Variant[];
 }
 
 export interface InventoryLog {
@@ -22,10 +32,11 @@ export interface InventoryLog {
 
 export interface Expense {
   id: string;
-  category: 'Gaji' | 'Iklan' | 'Listrik' | 'Lainnya';
+  category: 'Gaji' | 'Iklan' | 'Listrik' | 'Lainnya' | 'Sewa' | 'Marketing';
   amount: number;
   description: string;
   date: string;
+  paymentMethod: 'Cash' | 'Transfer' | 'Kartu Kredit' | 'E-Wallet';
 }
 
 export interface MarketplaceOrder {
@@ -34,7 +45,7 @@ export interface MarketplaceOrder {
   sku: string;
   payout: number;
   status: 'Completed' | 'Returned';
-  source: 'Shopee' | 'TikTok';
+  source: 'Shopee' | 'TikTok Shop Tokopedia' | 'Lazada';
   date: string;
 }
 
@@ -57,11 +68,21 @@ export interface Invoice {
   items: { sku: string; qty: number; price: number }[];
 }
 
+export interface UserProfile {
+  storeName: string;
+  ownerName: string;
+  whatsapp: string;
+  category: string;
+  email: string;
+  image?: string;
+}
+
 export enum AppTab {
   DASHBOARD = 'dashboard',
   INVENTORY = 'inventory',
   EXPENSES = 'expenses',
   CRM = 'crm',
   MARKETPLACE = 'marketplace',
-  MAGIC_STUDIO = 'magic_studio'
+  MAGIC_STUDIO = 'magic_studio',
+  PROFILE = 'profile'
 }

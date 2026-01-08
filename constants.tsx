@@ -7,6 +7,7 @@ import {
   Users, 
   ShoppingCart, 
   Sparkles, 
+  Settings,
   TrendingUp, 
   AlertCircle, 
   Plus, 
@@ -15,12 +16,13 @@ import {
 } from 'lucide-react';
 
 export const NAVIGATION = [
-  { id: 'dashboard', label: 'Command Center', icon: <LayoutDashboard size={20} /> },
+  { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard size={20} /> },
+  { id: 'magic_studio', label: 'Magic Studio', icon: <Sparkles size={20} /> },
   { id: 'marketplace', label: 'Profit Analytics', icon: <ShoppingCart size={20} /> },
   { id: 'inventory', label: 'Gudang Digital', icon: <Package size={20} /> },
   { id: 'expenses', label: 'Jurnal Operasional', icon: <Receipt size={20} /> },
   { id: 'crm', label: 'Sales & CRM', icon: <Users size={20} /> },
-  { id: 'magic_studio', label: 'Magic Studio', icon: <Sparkles size={20} /> },
+  { id: 'profile', label: 'Profil Toko', icon: <Settings size={20} /> },
 ];
 
 export const MOCK_PRODUCTS: any[] = [
@@ -30,13 +32,15 @@ export const MOCK_PRODUCTS: any[] = [
 ];
 
 export const MOCK_EXPENSES: any[] = [
-  { id: 'e1', category: 'Iklan', amount: 500000, description: 'FB Ads Minggu 1', date: '2024-03-20' },
-  { id: 'e2', category: 'Listrik', amount: 200000, description: 'PLN Maret', date: '2024-03-21' },
+  { id: 'e1', category: 'Iklan', amount: 500000, description: 'FB Ads Minggu 1', date: '2024-03-20', paymentMethod: 'Transfer' },
+  { id: 'e2', category: 'Listrik', amount: 200000, description: 'PLN Maret', date: '2024-03-21', paymentMethod: 'E-Wallet' },
+  { id: 'e3', category: 'Gaji', amount: 3500000, description: 'Gaji Admin Gudang', date: '2024-03-25', paymentMethod: 'Transfer' },
+  { id: 'e4', category: 'Marketing', amount: 150000, description: 'Cetak Sticker Branding', date: '2024-03-22', paymentMethod: 'Cash' },
 ];
 
 export const MOCK_ORDERS: any[] = [
   { id: 'o1', orderId: 'SH-1234', sku: 'S-RED-XL', payout: 78000, status: 'Completed', source: 'Shopee', date: '2024-03-20' },
-  { id: 'o2', orderId: 'TT-5678', sku: 'S-BLUE-M', payout: 75000, status: 'Completed', source: 'TikTok', date: '2024-03-21' },
+  { id: 'o2', orderId: 'TT-5678', sku: 'S-BLUE-M', payout: 75000, status: 'Completed', source: 'TikTok Shop Tokopedia', date: '2024-03-21' },
 ];
 
 export const MOCK_CUSTOMERS: any[] = [

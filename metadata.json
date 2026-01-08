@@ -1,0 +1,8 @@
+{
+  "name": "Selina - Seller Assistant Indonesia",
+  "description": "SaaS Unicorn for Indonesian sellers: profit analytics, inventory management, CRM, and AI-powered marketing tools.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}

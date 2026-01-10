@@ -1,14 +1,14 @@
 
-import { GoogleGenAI, Type, FunctionDeclaration } from "@google/genai";
+import { GoogleGenAI } from "@google/genai";
 
-export const checkStockFunction: FunctionDeclaration = {
+export const checkStockFunction = {
   name: 'check_stock',
   parameters: {
-    type: Type.OBJECT,
+    type: 'OBJECT',
     description: 'Mengecek ketersediaan stok barang berdasarkan SKU.',
     properties: {
       sku: {
-        type: Type.STRING,
+        type: 'STRING',
         description: 'Kode SKU barang (contoh: S-RED-XL)',
       },
     },
@@ -16,14 +16,14 @@ export const checkStockFunction: FunctionDeclaration = {
   },
 };
 
-export const getProfitReportFunction: FunctionDeclaration = {
+export const getProfitReportFunction = {
   name: 'get_profit_report',
   parameters: {
-    type: Type.OBJECT,
+    type: 'OBJECT',
     description: 'Mendapatkan ringkasan laporan profit bulanan.',
     properties: {
       month: {
-        type: Type.STRING,
+        type: 'STRING',
         description: 'Bulan yang diinginkan (contoh: Maret)',
       },
     },
@@ -31,14 +31,14 @@ export const getProfitReportFunction: FunctionDeclaration = {
   },
 };
 
-export const analyzeCustomerFunction: FunctionDeclaration = {
+export const analyzeCustomerFunction = {
   name: 'analyze_customer',
   parameters: {
-    type: Type.OBJECT,
+    type: 'OBJECT',
     description: 'Menganalisa profil dan sejarah belanja customer.',
     properties: {
       name: {
-        type: Type.STRING,
+        type: 'STRING',
         description: 'Nama customer',
       },
     },
@@ -56,14 +56,43 @@ Data Toko: Kamu memiliki akses ke database produk dan transaksi.
 `;
 
 export const getChatModel = () => {
-  // Fixed: Use direct process.env.API_KEY and initialize right before usage
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   return ai.models.generateContent({
     model: 'gemini-3-flash-preview',
     contents: 'Halo Selina!',
     config: {
       systemInstruction,
-      tools: [{ functionDeclarations: [checkStockFunction, getProfitReportFunction, analyzeCustomerFunction] }],
+      tools: [{ functionDeclarations: [checkStockFunction as any, getProfitReportFunction as any, analyzeCustomerFunction as any] }],
     }
   });
+};
+
+/**
+ * AI Auditor Logic
+ */
+export const analyzeTransaction = async (transactionData: {
+  sku: string;
+  harga_jual: number;
+  hpp: number;
+  potongan_total: number;
+  profit: number;
+}): Promise<string> => {
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  
+  const auditInstruction = `Kamu adalah Auditor Keuangan Selina. Tugasmu adalah menganalisa satu transaksi marketplace dan menjelaskan kepada seller KENAPA transaksi ini rugi/boncos dalam bahasa Indonesia yang santai tapi tegas. Fokus pada: Apakah biaya admin terlalu besar? Apakah ada selisih ongkir? Apakah HPP terlalu mahal dibanding harga jual? Berikan saran perbaikan singkat. Output maksimal 2 kalimat.`;
+
+  try {
+    const response = await ai.models.generateContent({
+      model: 'gemini-3-flash-preview',
+      contents: `Audit transaksi ini: ${JSON.stringify(transactionData)}`,
+      config: {
+        systemInstruction: auditInstruction,
+        temperature: 0.7,
+      },
+    });
+    return response.text?.trim() || "Gagal menganalisa transaksi.";
+  } catch (error) {
+    console.error("Audit AI Error:", error);
+    return "Maaf Juragan, sistem audit AI sedang sibuk. Coba sesaat lagi.";
+  }
 };

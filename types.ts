@@ -1,4 +1,7 @@
 
+export type UserRole = 'USER' | 'ADMIN';
+export type UserPlan = 'FREE' | 'JURAGAN' | 'SULTAN';
+
 export interface Variant {
   id: string;
   sku: string;
@@ -20,16 +23,6 @@ export interface Product {
   variants?: Variant[];
 }
 
-export interface InventoryLog {
-  id: string;
-  productId: string;
-  sku: string;
-  type: 'IN' | 'OUT';
-  qty: number;
-  note: string;
-  createdAt: string;
-}
-
 export interface Expense {
   id: string;
   category: 'Gaji' | 'Iklan' | 'Listrik' | 'Lainnya' | 'Sewa' | 'Marketing';
@@ -39,14 +32,17 @@ export interface Expense {
   paymentMethod: 'Cash' | 'Transfer' | 'Kartu Kredit' | 'E-Wallet';
 }
 
-export interface MarketplaceOrder {
-  id: string;
+export interface AnalyzedOrder {
   orderId: string;
-  sku: string;
+  username: string;
+  productName: string;
+  variant: string;
+  transactionValue: number;
+  totalHpp: number;
   payout: number;
-  status: 'Completed' | 'Returned';
-  source: 'Shopee' | 'TikTok Shop Tokopedia' | 'Lazada';
+  profit: number;
   date: string;
+  category: string;
 }
 
 export interface Customer {
@@ -59,6 +55,23 @@ export interface Customer {
   totalSpent: number;
 }
 
+export interface UserProfile {
+  id: string;
+  storeName: string;
+  ownerName: string;
+  whatsapp: string;
+  category: string;
+  email: string;
+  image?: string;
+  role: UserRole;
+  plan: UserPlan;
+  magicCredits: number;
+  createdAt: string;
+  status: 'ACTIVE' | 'BANNED';
+  subscriptionStatus?: 'ACTIVE' | 'EXPIRED' | 'CANCELLED';
+  subscriptionEndDate?: string;
+}
+
 export interface Invoice {
   id: string;
   customerId: string;
@@ -68,13 +81,23 @@ export interface Invoice {
   items: { sku: string; qty: number; price: number }[];
 }
 
-export interface UserProfile {
-  storeName: string;
-  ownerName: string;
-  whatsapp: string;
-  category: string;
-  email: string;
-  image?: string;
+export interface MarketplaceOrder {
+  id: string;
+  orderId: string;
+  marketplace: string;
+  status: string;
+  date: string;
+  total: number;
+}
+
+export interface BillingHistory {
+  id: string;
+  orderId: string;
+  amount: number;
+  status: 'pending' | 'settlement' | 'expire' | 'cancel';
+  type: 'SUBSCRIPTION' | 'TOPUP';
+  planType: string;
+  date: string;
 }
 
 export enum AppTab {
@@ -84,5 +107,10 @@ export enum AppTab {
   CRM = 'crm',
   MARKETPLACE = 'marketplace',
   MAGIC_STUDIO = 'magic_studio',
-  PROFILE = 'profile'
+  PRICING = 'pricing', // Tab baru
+  PROFILE = 'profile',
+  ADMIN_OVERVIEW = 'admin_overview',
+  ADMIN_USERS = 'admin_users',
+  ADMIN_MONITOR = 'admin_monitor',
+  ADMIN_SETTINGS = 'admin_settings'
 }

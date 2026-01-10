@@ -1,13 +1,15 @@
 
 import React from 'react';
 import { Product, Variant } from '../types';
-import { Search, Plus, Minus, Filter, Edit2, Trash2, X, AlertTriangle, Layers, ChevronDown, ChevronUp } from 'lucide-react';
+import { Search, Plus, Minus, Filter, Edit2, Trash2, X, AlertTriangle, Layers, ChevronDown, ChevronUp, Upload, FileSpreadsheet, Download, Package } from 'lucide-react';
+import * as XLSX from 'xlsx';
 
 interface InventoryProps {
   products: Product[];
   onUpdateStock: (id: string, delta: number) => void;
   onUpdateImage: (id: string, imageUrl: string) => void;
   onAddProduct: (product: Omit<Product, 'id'>) => void;
+  onBulkAddProducts: (products: Omit<Product, 'id'>[]) => void;
   onEditProduct: (product: Product) => void;
   onDeleteProduct: (id: string) => void;
 }
@@ -16,16 +18,17 @@ const Inventory: React.FC<InventoryProps> = ({
   products, 
   onUpdateStock, 
   onAddProduct,
+  onBulkAddProducts,
   onEditProduct,
   onDeleteProduct 
 }) => {
   const [isModalOpen, setIsModalOpen] = React.useState(false);
+  const [isBulkModalOpen, setIsBulkModalOpen] = React.useState(false);
   const [editingProduct, setEditingProduct] = React.useState<Product | null>(null);
   const [deleteTarget, setDeleteTarget] = React.useState<Product | null>(null);
   const [hasVariants, setHasVariants] = React.useState(false);
   const [expandedRows, setExpandedRows] = React.useState<Record<string, boolean>>({});
   
-  // Form State
   const [formData, setFormData] = React.useState({
     sku: '',
     name: '',
@@ -36,7 +39,6 @@ const Inventory: React.FC<InventoryProps> = ({
     variants: [] as Variant[]
   });
 
-  // Handle Edit Click
   const handleEditClick = (product: Product) => {
     setEditingProduct(product);
     setHasVariants(!!(product.variants && product.variants.length > 0));
@@ -52,7 +54,6 @@ const Inventory: React.FC<InventoryProps> = ({
     setIsModalOpen(true);
   };
 
-  // Handle Close Modal
   const closeModal = () => {
     setIsModalOpen(false);
     setEditingProduct(null);
@@ -107,6 +108,50 @@ const Inventory: React.FC<InventoryProps> = ({
     closeModal();
   };
 
+  const downloadTemplate = () => {
+    const data = [
+      ['Nama Barang', 'SKU', 'Kategori', 'HPP', 'Harga Jual', 'Stok'],
+      ['Contoh Kaos Polo', 'POLO-001', 'Apparel', 45000, 125000, 100]
+    ];
+    const ws = XLSX.utils.aoa_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Template Inventory");
+    XLSX.writeFile(wb, "selina_inventory_template.xlsx");
+  };
+
+  const handleBulkUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const data = new Uint8Array(event.target?.result as ArrayBuffer);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const firstSheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[firstSheetName];
+        const jsonData = XLSX.utils.sheet_to_json(worksheet);
+
+        const newProducts: Omit<Product, 'id'>[] = jsonData.map((row: any) => ({
+          name: String(row['Nama Barang'] || row['nama barang'] || ''),
+          sku: String(row['SKU'] || row['sku'] || ''),
+          category: String(row['Kategori'] || row['kategori'] || 'Lainnya'),
+          hpp: Number(row['HPP'] || row['hpp'] || 0),
+          price: Number(row['Harga Jual'] || row['harga jual'] || 0),
+          stock: Number(row['Stok'] || row['stok'] || 0),
+          variants: []
+        })).filter(p => p.name && p.sku);
+
+        if (newProducts.length > 0) {
+          onBulkAddProducts(newProducts);
+          setIsBulkModalOpen(false);
+          alert(`Berhasil mengimpor ${newProducts.length} barang ke Inventory!`);
+        } else {
+          alert("Format file tidak sesuai atau data kosong. Gunakan template excel yang tersedia.");
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    }
+  };
+
   const toggleExpand = (id: string) => {
     setExpandedRows(prev => ({ ...prev, [id]: !prev[id] }));
   };
@@ -133,8 +178,11 @@ const Inventory: React.FC<InventoryProps> = ({
           />
         </div>
         <div className="flex items-center gap-3">
-          <button className="flex items-center gap-2 px-4 py-2 text-slate-600 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors shadow-sm text-sm font-medium">
-            <Filter size={18} /> Filter
+          <button 
+            onClick={() => setIsBulkModalOpen(true)}
+            className="flex items-center gap-2 px-4 py-2 text-slate-600 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors shadow-sm text-sm font-medium"
+          >
+            <Upload size={18} /> Bulk Import
           </button>
           <button 
             onClick={() => setIsModalOpen(true)}
@@ -256,9 +304,67 @@ const Inventory: React.FC<InventoryProps> = ({
                 </React.Fragment>
               );
             })}
+            {products.length === 0 && (
+              <tr>
+                <td colSpan={7} className="px-6 py-20 text-center">
+                  <div className="flex flex-col items-center gap-2 text-slate-400">
+                    <Package size={40} className="opacity-20" />
+                    <p className="text-sm">Inventory masih kosong. Mulai tambah barang atau import massal.</p>
+                  </div>
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>
+
+      {/* Bulk Upload Modal */}
+      {isBulkModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[100] flex items-center justify-center p-4 animate-in fade-in duration-300">
+          <div className="bg-white w-full max-w-md rounded-[32px] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300 border border-slate-100">
+            <div className="p-6 border-b flex justify-between items-center bg-slate-900 text-white">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-indigo-500 rounded-xl"><FileSpreadsheet size={20}/></div>
+                <h3 className="text-xl font-bold">Bulk Import Barang</h3>
+              </div>
+              <button onClick={() => setIsBulkModalOpen(false)} className="p-2 hover:bg-white/10 rounded-xl transition-colors"><X size={20}/></button>
+            </div>
+            <div className="p-8 text-center space-y-6">
+              <div className="p-4 bg-indigo-50 rounded-2xl border border-indigo-100 text-left">
+                <h4 className="text-xs font-bold text-indigo-700 uppercase mb-2">Langkah Impor:</h4>
+                <ol className="text-[11px] text-indigo-600 space-y-1 list-decimal ml-4">
+                  <li>Download template Excel di bawah ini.</li>
+                  <li>Isi data produk Juragan sesuai kolom.</li>
+                  <li>Upload kembali file .xlsx yang sudah diisi.</li>
+                </ol>
+              </div>
+
+              <div className="space-y-4">
+                <button 
+                  onClick={downloadTemplate}
+                  className="w-full py-3 bg-white border border-slate-200 text-slate-700 rounded-xl font-bold hover:bg-slate-50 transition-all flex items-center justify-center gap-2 text-sm shadow-sm"
+                >
+                  <Download size={16} /> Download Template Excel
+                </button>
+                
+                <div className="relative group">
+                  <input 
+                    type="file" 
+                    accept=".xlsx, .xls" 
+                    onChange={handleBulkUpload}
+                    className="absolute inset-0 opacity-0 cursor-pointer z-10" 
+                  />
+                  <div className="w-full py-10 border-2 border-dashed border-slate-200 rounded-[24px] group-hover:border-indigo-400 group-hover:bg-indigo-50/50 transition-all flex flex-col items-center justify-center gap-2">
+                     <Upload size={32} className="text-slate-300 group-hover:text-indigo-500" />
+                     <span className="text-sm font-bold text-slate-400 group-hover:text-indigo-600">Pilih File Excel Juragan</span>
+                     <span className="text-[10px] text-slate-300 italic">Format: .xlsx atau .xls</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Manual Add/Edit Product Modal */}
       {isModalOpen && (
@@ -446,6 +552,7 @@ const Inventory: React.FC<InventoryProps> = ({
                               type="number"
                               required
                               value={v.stock}
+                              // Fix: wrap in arrow function to fix "Cannot find name 'e'" error
                               onChange={e => updateVariant(v.id, 'stock', parseInt(e.target.value) || 0)}
                               className={inputClasses}
                             />

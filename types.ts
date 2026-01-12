@@ -23,6 +23,18 @@ export interface Product {
   variants?: Variant[];
 }
 
+export interface StockJournalEntry {
+  id: string;
+  productId: string;
+  variantId?: string;
+  productName: string;
+  variantName?: string;
+  type: 'IN' | 'OUT';
+  quantity: number;
+  detail: string; // Vendor for IN, Channel for OUT
+  date: string;
+}
+
 export interface Expense {
   id: string;
   category: 'Gaji' | 'Iklan' | 'Listrik' | 'Lainnya' | 'Sewa' | 'Marketing';
@@ -34,6 +46,7 @@ export interface Expense {
 
 export interface AnalyzedOrder {
   orderId: string;
+  noResi?: string;
   username: string;
   productName: string;
   variant: string;
@@ -100,14 +113,29 @@ export interface BillingHistory {
   date: string;
 }
 
+export interface WinningFormula {
+  titles: string[];
+  description: string;
+  visualPrompts: {
+    title: string;
+    prompt: string;
+    rationale: string;
+  }[];
+  analysis: {
+    keywords: string[];
+    painPoints: string[];
+  };
+}
+
 export enum AppTab {
   DASHBOARD = 'dashboard',
   INVENTORY = 'inventory',
   EXPENSES = 'expenses',
   CRM = 'crm',
   MARKETPLACE = 'marketplace',
+  INTERNAL_ANALYTICS = 'internal_analytics',
   MAGIC_STUDIO = 'magic_studio',
-  PRICING = 'pricing', // Tab baru
+  PRICING = 'pricing',
   PROFILE = 'profile',
   ADMIN_OVERVIEW = 'admin_overview',
   ADMIN_USERS = 'admin_users',

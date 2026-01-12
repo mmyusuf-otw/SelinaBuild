@@ -28,12 +28,12 @@ const Layout: React.FC<LayoutProps> = ({ activeTab, setActiveTab, children, user
     <div className="flex h-screen overflow-hidden relative font-sans">
       {isSidebarOpen && (
         <div 
-          className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-40 lg:hidden transition-opacity duration-300"
+          className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-40 lg:hidden transition-opacity duration-300 print:hidden"
           onClick={() => setIsSidebarOpen(false)}
         />
       )}
 
-      <aside className={`fixed inset-y-0 left-0 z-50 w-72 bg-white border-r transition-transform duration-300 ease-in-out lg:static lg:translate-x-0 ${isSidebarOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full'}`}>
+      <aside className={`fixed inset-y-0 left-0 z-50 w-72 bg-white border-r transition-transform duration-300 ease-in-out lg:static lg:translate-x-0 print:hidden ${isSidebarOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full'}`}>
         <div className="flex flex-col h-full p-8">
           <div className="flex items-center justify-between mb-12 px-2">
             <div className="flex items-center gap-3">
@@ -94,8 +94,8 @@ const Layout: React.FC<LayoutProps> = ({ activeTab, setActiveTab, children, user
         </div>
       </aside>
 
-      <main className="flex-1 overflow-y-auto bg-slate-50/50">
-        <header className="sticky top-0 z-30 bg-white/80 backdrop-blur-md border-b px-8 py-6 flex items-center justify-between">
+      <main className="flex-1 overflow-y-auto bg-slate-50/50 print:overflow-visible">
+        <header className="sticky top-0 z-30 bg-white/80 backdrop-blur-md border-b px-8 py-6 flex items-center justify-between print:hidden">
           <div className="flex items-center gap-6">
             {!isDashboard ? (
               <button 
@@ -130,7 +130,7 @@ const Layout: React.FC<LayoutProps> = ({ activeTab, setActiveTab, children, user
           </div>
         </header>
 
-        <div className="p-8 lg:p-12 max-w-7xl mx-auto">
+        <div className="p-8 lg:p-12 max-w-7xl mx-auto print:p-0 print:max-w-none">
           {children}
         </div>
       </main>

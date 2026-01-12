@@ -30,7 +30,9 @@ const MONTHS = [
   'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
 ];
 
-const YEARS = [2023, 2024, 2025];
+// Menghasilkan daftar tahun secara dinamis (2023 sampai Current Year + 2)
+const currentYearNum = new Date().getFullYear();
+const YEARS = Array.from({ length: (currentYearNum + 2) - 2023 + 1 }, (_, i) => 2023 + i);
 
 const Dashboard: React.FC<DashboardProps> = ({ analyzedOrders, expenses, invoices, products }) => {
   const [dateFilter, setDateFilter] = React.useState<DateFilter>('last30');

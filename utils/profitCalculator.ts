@@ -2,267 +2,192 @@
 import * as XLSX from 'xlsx';
 import { AnalyzedOrder } from '../types';
 
-export interface RawOrderRow {
-  orderId: string;
-  noResi: string;
-  sku: string;
-  qty: number;
-  productName: string;
-  variantName: string;
-  date: string;
-}
-
-export interface RawIncomeRow {
-  orderId: string;
-  payout: number;
-  revenue: number;
-}
+/**
+ * Normalisasi string untuk pencocokan header (lowercase & alphanumeric only)
+ */
+const normalize = (str: any): string => String(str || "").toLowerCase().replace(/[^a-z0-9]/g, "");
 
 /**
- * Membersihkan string untuk perbandingan (lowercase, hapus spasi & simbol)
+ * Pembersihan angka dari format string IDR/Ribuan/Koma
  */
-const normalizeHeader = (str: any): string => {
-  return String(str || "").toLowerCase().replace(/[^a-z0-9]/g, "");
-};
-
-/**
- * Pembersih angka yang mendukung format Indonesia dan Internasional
- */
-const cleanNumber = (val: any): number => {
+const cleanNum = (val: any): number => {
   if (typeof val === 'number') return val;
   if (!val) return 0;
-  
-  let str = String(val).trim();
-  str = str.replace(/(Rp|IDR|\s)/gi, "");
-  
-  if (str.includes('.') && str.includes(',')) {
-    str = str.replace(/\./g, "").replace(",", ".");
-  } else if (str.includes(',') && !str.includes('.')) {
-    str = str.replace(",", ".");
-  }
-  
+  let str = String(val).trim().replace(/(Rp|IDR|\s)/gi, "");
+  // Handle format 1.000,00 vs 1,000.00
+  if (str.includes('.') && str.includes(',')) str = str.replace(/\./g, "").replace(",", ".");
+  else if (str.includes(',') && !str.includes('.')) str = str.replace(",", ".");
   const num = parseFloat(str);
   return isNaN(num) ? 0 : num;
 };
 
+interface ReconciliationFiles {
+  orderReport: File;
+  settlementReport: File;
+  productMaster: File;
+}
+
+export interface ReconResult {
+  orders: AnalyzedOrder[];
+  summary: {
+    totalRevenue: number;
+    totalActualPayout: number;
+    totalHpp: number;
+    totalProfit: number;
+    totalMismatches: number;
+    totalGap: number;
+  };
+}
+
 /**
- * Mencari baris header dengan mencari baris yang mengandung "No Pesanan" atau "SKU"
+ * Selina Reconciliation Engine: 3-Way Matching Algorithm
+ * 1. Map Product Master (SKU -> HPP)
+ * 2. Map Settlement (Order ID -> Actual Payout & Fees)
+ * 3. Process Order Report (Self-Healing & Grouping)
+ * 4. Perform 3-Way Calculation & Gap Analysis
  */
-const findHeaderRow = (sheetData: any[][], criticalKeywords: string[]): number => {
-  const normalizedKeywords = criticalKeywords.map(k => normalizeHeader(k));
+export const processReconciliation = async (files: ReconciliationFiles): Promise<ReconResult> => {
+  const readExcel = (file: File): Promise<any[][]> => {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const data = new Uint8Array(e.target?.result as ArrayBuffer);
+        const wb = XLSX.read(data, { type: 'array' });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        resolve(XLSX.utils.sheet_to_json(ws, { header: 1 }));
+      };
+      reader.readAsArrayBuffer(file);
+    });
+  };
+
+  const [orderRaw, settlementRaw, masterRaw] = await Promise.all([
+    readExcel(files.orderReport),
+    readExcel(files.settlementReport),
+    readExcel(files.productMaster)
+  ]);
+
+  // --- STEP 1: LOOKUP MAPS ---
   
-  for (let i = 0; i < Math.min(sheetData.length, 100); i++) {
-    const row = (sheetData[i] || []).map(cell => normalizeHeader(cell));
-    // Jika baris ini mengandung salah satu keyword kritis, anggap sebagai header
-    if (normalizedKeywords.some(k => row.some(cell => cell.includes(k)))) {
-      return i;
+  // Product Master Map: SKU -> HPP
+  const hppMap = new Map<string, number>();
+  const masterHeaders = masterRaw[0].map(h => normalize(h));
+  const skuIdxM = masterHeaders.findIndex(h => h.includes("sku"));
+  const hppIdxM = masterHeaders.findIndex(h => h.includes("hpp") || h.includes("modal") || h.includes("cost"));
+  
+  masterRaw.slice(1).forEach(row => {
+    const sku = String(row[skuIdxM] || "").trim();
+    if (sku) hppMap.set(sku, cleanNum(row[hppIdxM]));
+  });
+
+  // Settlement Map: Order ID -> { ActualPayout, Fees }
+  const settlementMap = new Map<string, { payout: number; fees: number }>();
+  const setHeadersIdx = settlementRaw.findIndex(row => row.some(cell => normalize(cell).includes("nopesanan") || normalize(cell).includes("orderid")));
+  const setCols = settlementRaw[setHeadersIdx].map(h => normalize(h));
+  const orderIdIdxS = setCols.findIndex(h => h.includes("nopesanan") || h.includes("orderid") || h.includes("nomorpesanan"));
+  const payoutIdxS = setCols.findIndex(h => h.includes("totalpenghasilan") || h.includes("releasedamount") || h.includes("payout") || h.includes("jumlahdana"));
+  const feesIdxS = setCols.findIndex(h => h.includes("biayaadministrasi") || h.includes("fees") || h.includes("biayapenyelesaian"));
+
+  settlementRaw.slice(setHeadersIdx + 1).forEach(row => {
+    const id = String(row[orderIdIdxS] || "").trim();
+    if (id) {
+      const current = settlementMap.get(id) || { payout: 0, fees: 0 };
+      settlementMap.set(id, {
+        payout: current.payout + cleanNum(row[payoutIdxS]),
+        fees: current.fees + cleanNum(row[feesIdxS])
+      });
     }
-  }
-  return -1;
-};
-
-/**
- * Mencari index kolom berdasarkan daftar alias.
- */
-const getColIndex = (headers: any[], aliases: string[]): number => {
-  const normalizedAliases = aliases.map(a => normalizeHeader(a));
-  const normalizedHeaders = headers.map(h => normalizeHeader(h));
-  
-  return normalizedHeaders.findIndex(header => 
-    normalizedAliases.some(alias => header.includes(alias))
-  );
-};
-
-/**
- * Parsing File Pesanan
- */
-export const parseOrdersExcel = async (file: File): Promise<RawOrderRow[]> => {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      try {
-        const data = new Uint8Array(e.target?.result as ArrayBuffer);
-        const workbook = XLSX.read(data, { type: 'array' });
-        const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-        const json: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
-        
-        // Cari baris header (Biasanya ada kata "No Pesanan" atau "SKU")
-        const headerIdx = findHeaderRow(json, ["No Pesanan", "Order ID", "Nomor Pesanan", "SKU"]);
-        if (headerIdx === -1) throw new Error("Format Laporan Pesanan tidak dikenali. Pastikan ini adalah file ekspor asli.");
-        
-        const headers = json[headerIdx];
-        const rows = json.slice(headerIdx + 1);
-
-        const orderIdCol = getColIndex(headers, ["No Pesanan", "Order ID", "Nomor Pesanan", "ID Pesanan", "Order Number"]);
-        const noResiCol = getColIndex(headers, ["No. Resi", "Tracking Number", "Nomor Resi", "Tracking ID"]);
-        const skuCol = getColIndex(headers, ["SKU Reference", "Nomor Referensi SKU", "SKU Induk", "Parent SKU", "SKU", "Ref SKU"]);
-        const qtyCol = getColIndex(headers, ["Jumlah", "Quantity", "Qty", "Item Count", "Total Quantity"]);
-        const productNameCol = getColIndex(headers, ["Nama Produk", "Product Name", "Produk", "Item Name"]);
-        const variantNameCol = getColIndex(headers, ["Nama Variasi", "Variation", "Varian", "Variant Name"]);
-        const dateCol = getColIndex(headers, ["Waktu Pesanan Dibuat", "Order Creation Time", "Order Date", "Tanggal", "Created At"]);
-
-        if (orderIdCol === -1) throw new Error("Kolom 'Nomor Pesanan' tidak ditemukan di file Pesanan.");
-
-        const parsed = rows.map(row => {
-          const id = String(row[orderIdCol] || "").trim();
-          if (!id || id === "undefined" || id.length < 5) return null;
-
-          return {
-            orderId: id,
-            noResi: String(row[noResiCol] || "-"),
-            sku: String(row[skuCol] || "").trim(),
-            qty: cleanNumber(row[qtyCol]) || 1,
-            productName: String(row[productNameCol] || "Produk Tanpa Nama"),
-            variantName: String(row[variantNameCol] || ""),
-            date: String(row[dateCol] || new Date().toISOString())
-          };
-        }).filter(Boolean) as RawOrderRow[];
-
-        resolve(parsed);
-      } catch (err) {
-        reject(err);
-      }
-    };
-    reader.readAsArrayBuffer(file);
   });
-};
 
-/**
- * Parsing Laporan Penghasilan / Dana Dilepas
- */
-export const parseIncomeExcel = async (file: File): Promise<RawIncomeRow[]> => {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      try {
-        const data = new Uint8Array(e.target?.result as ArrayBuffer);
-        const workbook = XLSX.read(data, { type: 'array' });
-        const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-        const json: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
-        
-        // Shopee/TikTok sering punya header "Penghasilan" atau "Settlement"
-        const headerIdx = findHeaderRow(json, ["No Pesanan", "Order ID", "Penghasilan", "Released", "Dana Dilepas"]);
-        if (headerIdx === -1) throw new Error("Format Laporan Penghasilan tidak dikenali. Pastikan file benar.");
-        
-        const headers = json[headerIdx];
-        const rows = json.slice(headerIdx + 1);
-
-        // Alias yang lebih luas untuk Order ID di file finansial
-        const orderIdCol = getColIndex(headers, ["No Pesanan", "Order ID", "Nomor Pesanan", "ID Pesanan", "Order Number", "Nomor Referensi"]);
-        const payoutCol = getColIndex(headers, ["Total Penghasilan", "Released Amount", "Dana Dilepas", "Net Payout", "Settlement Amount", "Total Payout"]);
-        const revenueCol = getColIndex(headers, ["Harga Asli Produk", "Product Price", "Original Price", "Order Amount", "Total Penjualan", "Gross Revenue"]);
-
-        if (orderIdCol === -1) throw new Error("Kolom 'Nomor Pesanan' tidak ditemukan di file Penghasilan.");
-        if (payoutCol === -1) throw new Error("Kolom 'Dana Dilepas' atau 'Total Penghasilan' tidak ditemukan.");
-
-        const parsed = rows.map(row => {
-          const id = String(row[orderIdCol] || "").trim();
-          const amount = cleanNumber(row[payoutCol]);
-          if (!id || id === "undefined" || amount === 0) return null;
-
-          return {
-            orderId: id,
-            payout: amount,
-            revenue: cleanNumber(row[revenueCol]) || amount
-          };
-        }).filter(Boolean) as RawIncomeRow[];
-
-        resolve(parsed);
-      } catch (err) {
-        reject(err);
-      }
-    };
-    reader.readAsArrayBuffer(file);
-  });
-};
-
-/**
- * Parsing Master HPP
- */
-export const parseHppExcel = async (file: File): Promise<Record<string, number>> => {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      try {
-        const data = new Uint8Array(e.target?.result as ArrayBuffer);
-        const workbook = XLSX.read(data, { type: 'array' });
-        const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-        const json: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
-        
-        // Master HPP biasanya sederhana, cari "SKU" atau "HPP"
-        const headerIdx = findHeaderRow(json, ["SKU", "HPP", "Modal", "Harga Beli"]);
-        if (headerIdx === -1) throw new Error("Format Master HPP tidak dikenali. Pastikan ada judul kolom 'SKU' dan 'HPP'.");
-        
-        const headers = json[headerIdx];
-        const rows = json.slice(headerIdx + 1);
-
-        const skuCol = getColIndex(headers, ["SKU", "Kode Barang", "Item Code", "Product ID", "Referansi"]);
-        const hppCol = getColIndex(headers, ["HPP", "Modal", "Harga Beli", "Cost", "Harga Modal", "COGS"]);
-
-        if (skuCol === -1 || hppCol === -1) throw new Error("File HPP harus memiliki kolom 'SKU' dan 'HPP' (atau Modal).");
-
-        const map: Record<string, number> = {};
-        rows.forEach(row => {
-          const sku = String(row[skuCol] || "").trim();
-          const hpp = cleanNumber(row[hppCol]);
-          if (sku && sku !== "undefined") {
-            map[sku] = hpp;
-          }
-        });
-
-        resolve(map);
-      } catch (err) {
-        reject(err);
-      }
-    };
-    reader.readAsArrayBuffer(file);
-  });
-};
-
-export const calculateNetProfit = (
-  rawOrders: RawOrderRow[], 
-  rawIncome: RawIncomeRow[], 
-  hppMap: Record<string, number>
-): { analyzed: AnalyzedOrder[], missingSkus: Set<string> } => {
+  // --- STEP 2: PROCESS ORDERS (SELF-HEALING & MERGE) ---
   
-  const missingSkus = new Set<string>();
-  const ordersMap: Record<string, { items: RawOrderRow[], totalHpp: number }> = {};
+  const orderHeadersIdx = orderRaw.findIndex(row => row.some(cell => normalize(cell).includes("nopesanan") || normalize(cell).includes("orderid")));
+  const orderCols = orderRaw[orderHeadersIdx].map(h => normalize(h));
   
-  rawOrders.forEach(order => {
-    if (!ordersMap[order.orderId]) {
-      ordersMap[order.orderId] = { items: [], totalHpp: 0 };
+  const idx = {
+    orderId: orderCols.findIndex(h => h.includes("nopesanan") || h.includes("orderid")),
+    sku: orderCols.findIndex(h => h.includes("sku") || h.includes("namaproduk")),
+    price: orderCols.findIndex(h => h.includes("hargajual") || h.includes("sellingprice") || h.includes("hargasatuan")),
+    qty: orderCols.findIndex(h => h.includes("jumlah") || h.includes("quantity") || h.includes("qty")),
+    username: orderCols.findIndex(h => h.includes("username") || h.includes("namapembeli") || h.includes("namapenerima"))
+  };
+
+  const ordersData: Record<string, any> = {};
+  let lastUsername = "";
+  let lastOrderId = "";
+
+  orderRaw.slice(orderHeadersIdx + 1).forEach(row => {
+    let orderId = String(row[idx.orderId] || "").trim();
+    let username = String(row[idx.username] || "").trim();
+
+    // SELF-HEALING logic for multi-item rows
+    if (orderId && orderId === lastOrderId && !username) {
+      username = lastUsername;
+    } else if (orderId) {
+      lastOrderId = orderId;
+      lastUsername = username;
     }
+
+    if (!orderId || orderId === "undefined") return;
+
+    if (!ordersData[orderId]) {
+      ordersData[orderId] = {
+        orderId,
+        username: username || "Customer",
+        items: [],
+        revenue: 0,
+        totalHpp: 0
+      };
+    }
+
+    const sku = String(row[idx.sku] || "UNKNOWN").trim();
+    const qty = cleanNum(row[idx.qty]) || 1;
+    const price = cleanNum(row[idx.price]);
+    const hpp = hppMap.get(sku) || 0;
+
+    ordersData[orderId].items.push({ sku, qty, price });
+    ordersData[orderId].revenue += (price * qty);
+    ordersData[orderId].totalHpp += (hpp * qty);
+  });
+
+  // --- STEP 3: 3-WAY CALCULATION & COMPARISON ---
+  
+  const finalOrders: AnalyzedOrder[] = [];
+  let summary = { totalRevenue: 0, totalActualPayout: 0, totalHpp: 0, totalProfit: 0, totalMismatches: 0, totalGap: 0 };
+
+  Object.values(ordersData).forEach((order: any) => {
+    const settlement = settlementMap.get(order.orderId) || { payout: 0, fees: 0 };
     
-    const hpp = hppMap[order.sku] || 0;
-    if (hpp === 0 && order.sku) {
-      missingSkus.add(order.sku);
-    }
+    // Logic: Expected Payout = Revenue - Deductions (Fees)
+    // Gap = Actual - Expected
+    const expectedPayout = order.revenue - settlement.fees;
+    const gap = settlement.payout - expectedPayout;
     
-    ordersMap[order.orderId].items.push(order);
-    ordersMap[order.orderId].totalHpp += (hpp * order.qty);
+    // Status flag (Small tolerance of Rp 100 for rounding)
+    const isMismatch = Math.abs(gap) > 100 || settlement.payout === 0;
+
+    const analyzed: any = {
+      orderId: order.orderId,
+      username: order.username,
+      productName: order.items[0]?.sku || "Product",
+      variant: order.items.length > 1 ? `Multi-item (${order.items.length})` : "Single",
+      transactionValue: order.revenue,
+      totalHpp: order.totalHpp,
+      payout: settlement.payout,
+      profit: settlement.payout - order.totalHpp,
+      status: isMismatch ? 'MISMATCH' : 'PROOF',
+      gap: gap,
+      date: new Date().toLocaleDateString('id-ID')
+    };
+
+    finalOrders.push(analyzed);
+
+    summary.totalRevenue += order.revenue;
+    summary.totalActualPayout += settlement.payout;
+    summary.totalHpp += order.totalHpp;
+    summary.totalProfit += analyzed.profit;
+    summary.totalGap += gap;
+    if (isMismatch) summary.totalMismatches++;
   });
 
-  const analyzed: AnalyzedOrder[] = rawIncome.map(income => {
-    const orderData = ordersMap[income.orderId];
-    if (!orderData) return null;
-
-    const firstItem = orderData.items[0];
-    const isMultiItem = orderData.items.length > 1;
-
-    return {
-      orderId: income.orderId,
-      noResi: firstItem.noResi,
-      username: "Customer", 
-      productName: isMultiItem ? `${firstItem.productName} (+${orderData.items.length - 1} item)` : firstItem.productName,
-      variant: isMultiItem ? "Multi-Variant" : (firstItem.variantName || "-"),
-      transactionValue: income.revenue,
-      totalHpp: orderData.totalHpp,
-      payout: income.payout,
-      profit: income.payout - orderData.totalHpp,
-      date: firstItem.date,
-      category: "Marketplace"
-    };
-  }).filter(Boolean) as AnalyzedOrder[];
-
-  return { analyzed, missingSkus };
+  return { orders: finalOrders, summary };
 };

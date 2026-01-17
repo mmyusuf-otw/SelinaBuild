@@ -14,6 +14,7 @@ import MagicStudio from './components/MagicStudio';
 import AICopilot from './components/AICopilot';
 import MarketplaceAnalytics from './components/MarketplaceAnalytics';
 import InternalAnalytics from './components/InternalAnalytics';
+import ProductIntelligence from './components/ProductIntelligence';
 import Expenses from './components/Expenses';
 import CRM from './components/CRM';
 import Profile from './components/Profile';
@@ -165,6 +166,8 @@ const App: React.FC = () => {
         return <MarketplaceAnalytics onSetAnalyzedOrders={(data) => setAnalyzedOrders(data)} />;
       case AppTab.INTERNAL_ANALYTICS:
         return <InternalAnalytics />;
+      case AppTab.PRODUCT_INTELLIGENCE:
+        return <ProductIntelligence />;
       case AppTab.CRM:
         return (
           <CRM 

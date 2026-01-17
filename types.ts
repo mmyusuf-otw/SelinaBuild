@@ -134,6 +134,7 @@ export enum AppTab {
   CRM = 'crm',
   MARKETPLACE = 'marketplace',
   INTERNAL_ANALYTICS = 'internal_analytics',
+  PRODUCT_INTELLIGENCE = 'product_intelligence',
   MAGIC_STUDIO = 'magic_studio',
   PRICING = 'pricing',
   PROFILE = 'profile',

@@ -11,13 +11,15 @@ import {
   CreditCard,
   Crown,
   Coins,
-  BarChartHorizontal
+  BarChartHorizontal,
+  BrainCircuit
 } from 'lucide-react';
 
 export const NAVIGATION = [
   { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard size={20} /> },
   { id: 'magic_studio', label: 'Magic Studio', icon: <Sparkles size={20} /> },
   { id: 'internal_analytics', label: 'Deep Analytics', icon: <BarChartHorizontal size={20} /> },
+  { id: 'product_intelligence', label: 'Product Intel', icon: <BrainCircuit size={20} /> },
   { id: 'marketplace', label: 'Profit Analytics', icon: <ShoppingCart size={20} /> },
   { id: 'inventory', label: 'Inventory', icon: <Package size={20} /> },
   { id: 'expenses', label: 'Jurnal Operasional', icon: <Receipt size={20} /> },
